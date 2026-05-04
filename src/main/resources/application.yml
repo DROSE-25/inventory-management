@@ -1,0 +1,69 @@
+# src/main/resources/application.yml
+# Базові налаштування — спільні для всіх профілів
+ 
+spring:
+  application:
+    name: inventory-management
+ 
+  # Активний профіль (змінюється через env або CLI)
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+ 
+  # JPA / Hibernate
+  jpa:
+    open-in-view: false          # ВАЖЛИВО: вимкнути для REST API
+    show-sql: false              # увімкнути у dev через profile
+    hibernate:
+      ddl-auto: validate         # Flyway керує схемою — НЕ create/update!
+    properties:
+      hibernate:
+        format_sql: true
+        jdbc:
+          batch_size: 50         # batch insert для імпорту продажів
+        order_inserts: true
+        order_updates: true
+ 
+  # Flyway
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: false
+ 
+  # Thymeleaf
+  thymeleaf:
+    cache: false                 # вимкнути кеш у dev (увімкнути у prod)
+    encoding: UTF-8
+ 
+  # Jackson (JSON serialization)
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    default-property-inclusion: non_null
+ 
+# Swagger / OpenAPI
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: method
+  show-actuator: false
+ 
+# JWT налаштування
+app:
+  jwt:
+    secret: ${JWT_SECRET:myVerySecretKeyForDevelopmentOnly123456789012345678}
+    expiration-ms: ${JWT_EXPIRATION_MS:3600000}     # 1 година
+    refresh-expiration-ms: ${JWT_REFRESH_MS:604800000} # 7 днів
+ 
+# Логування
+logging:
+  level:
+    root: WARN
+    com.inventory: INFO
+    org.springframework.security: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/inventory.log
