@@ -17,6 +17,7 @@ public class DataInitRunner implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
+
         System.out.println("=== Перевірка репозиторіїв ===");
 
         userRepository.findByUsername("admin")
