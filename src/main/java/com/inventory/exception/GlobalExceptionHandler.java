@@ -5,6 +5,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
@@ -40,6 +42,18 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(body);
     }
  
+
+    @ExceptionHandler(InsufficientStockException.class)
+public ResponseEntity<Map<String, Object>> handleInsufficientStock(InsufficientStockException ex) {
+    return ResponseEntity.status(HttpStatus.CONFLICT)
+        .body(Map.of(
+            "timestamp", Instant.now(),
+            "status", 409,
+            "error", "Conflict",
+            "message", ex.getMessage()
+        ));
+}
+
     // 500 — всі інші помилки
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGeneral(Exception ex) {
