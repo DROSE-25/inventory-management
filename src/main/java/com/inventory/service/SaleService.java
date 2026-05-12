@@ -12,6 +12,7 @@ import com.inventory.repository.ProductRepository;
 import com.inventory.repository.SaleRepository;
 import com.inventory.repository.WarehouseRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
@@ -27,10 +28,18 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 
+@Slf4j
 @Service
 @Transactional
 @RequiredArgsConstructor
 public class SaleService {
+
+    // Константи для колонок Excel
+    private static final int EXCEL_COL_PRODUCT_ID = 0;
+    private static final int EXCEL_COL_WAREHOUSE_ID = 1;
+    private static final int EXCEL_COL_SALE_DATE = 2;
+    private static final int EXCEL_COL_QUANTITY = 3;
+    private static final int EXCEL_COL_UNIT_PRICE = 4;
 
     private final SaleRepository saleRepository;
     private final StockService stockService;
@@ -38,12 +47,16 @@ public class SaleService {
     private final WarehouseRepository warehouseRepository;
 
     public SaleResponse registerSale(SaleRequest dto) {
+        log.info("Реєстрація продажу: товар ID={}, склад ID={}, кількість={}", 
+                dto.getProductId(), dto.getWarehouseId(), dto.getQuantity());
+
         Product product = productRepository.findById(dto.getProductId())
-            .orElseThrow(() -> new ResourceNotFoundException("Product", dto.getProductId()));
+            .orElseThrow(() -> new ResourceNotFoundException("Товар", dto.getProductId()));
 
         Warehouse warehouse = warehouseRepository.findById(dto.getWarehouseId())
-            .orElseThrow(() -> new ResourceNotFoundException("Warehouse", dto.getWarehouseId()));
+            .orElseThrow(() -> new ResourceNotFoundException("Склад", dto.getWarehouseId()));
 
+        // Зменшуємо залишки на складі
         stockService.deductStock(dto.getProductId(), dto.getWarehouseId(), dto.getQuantity());
 
         Sale sale = Sale.builder()
@@ -55,11 +68,15 @@ public class SaleService {
             .createdAt(OffsetDateTime.now())
             .build();
 
-        return SaleMapper.toDTO(saleRepository.save(sale));
+        Sale savedSale = saleRepository.save(sale);
+        log.debug("Продаж успішно зареєстровано, ID запису: {}", savedSale.getId());
+        
+        return SaleMapper.toDTO(savedSale);
     }
 
     @Transactional(readOnly = true)
     public List<SaleResponse> getSalesByProductAndPeriod(Long productId, LocalDate from, LocalDate to) {
+        log.debug("Отримання історії продажів для товару ID={} з {} по {}", productId, from, to);
         return saleRepository
             .findByProductIdAndSaleDateBetweenOrderBySaleDateAsc(productId, from, to)
             .stream()
@@ -67,9 +84,8 @@ public class SaleService {
             .toList();
     }
 
-    // ─── НОВЫЕ МЕТОДЫ ────────────────────────────────────────────────────────
-
     public SaleImportResult importFromCsv(InputStream inputStream) {
+        log.info("Початок імпорту продажів з CSV файлу");
         SaleImportResult result = new SaleImportResult();
         int row = 1;
 
@@ -81,6 +97,7 @@ public class SaleService {
 
             List<CSVRecord> records = parser.getRecords();
             result.setTotalRows(records.size());
+            log.info("Знайдено {} рядків для імпорту", records.size());
 
             for (CSVRecord record : records) {
                 row++;
@@ -92,49 +109,59 @@ public class SaleService {
                         .quantity(new BigDecimal(record.get("quantity")))
                         .unitPrice(new BigDecimal(record.get("unit_price")))
                         .build();
+                        
                     registerSale(dto);
                     result.setSuccessCount(result.getSuccessCount() + 1);
                 } catch (Exception e) {
+                    log.warn("Помилка імпорту CSV у рядку {}: {}", row, e.getMessage());
                     result.addError(row, e.getMessage());
                 }
             }
         } catch (Exception e) {
-            result.addError(row, "Ошибка чтения файла: " + e.getMessage());
+            log.error("Критична помилка читання CSV файлу: {}", e.getMessage());
+            result.addError(row, "Помилка читання файлу: " + e.getMessage());
         }
 
+        log.info("Імпорт з CSV завершено. Успішно: {}/{}", result.getSuccessCount(), result.getTotalRows());
         return result;
     }
 
     public SaleImportResult importFromExcel(InputStream inputStream) {
+        log.info("Початок імпорту продажів з Excel файлу");
         SaleImportResult result = new SaleImportResult();
 
         try (Workbook workbook = WorkbookFactory.create(inputStream)) {
             Sheet sheet = workbook.getSheetAt(0);
-            // первая строка — заголовок, данные начинаются со строки 1
-            int totalDataRows = sheet.getLastRowNum(); // lastRowNum исключает header
+            int totalDataRows = sheet.getLastRowNum();
             result.setTotalRows(totalDataRows);
+            log.info("Знайдено {} рядків для імпорту в Excel", totalDataRows);
 
             for (int i = 1; i <= sheet.getLastRowNum(); i++) {
                 Row row = sheet.getRow(i);
                 if (row == null) continue;
+                
                 try {
                     SaleRequest dto = SaleRequest.builder()
-                        .productId((long) row.getCell(0).getNumericCellValue())
-                        .warehouseId((long) row.getCell(1).getNumericCellValue())
-                        .saleDate(row.getCell(2).getLocalDateTimeCellValue().toLocalDate())
-                        .quantity(BigDecimal.valueOf(row.getCell(3).getNumericCellValue()))
-                        .unitPrice(BigDecimal.valueOf(row.getCell(4).getNumericCellValue()))
+                        .productId((long) row.getCell(EXCEL_COL_PRODUCT_ID).getNumericCellValue())
+                        .warehouseId((long) row.getCell(EXCEL_COL_WAREHOUSE_ID).getNumericCellValue())
+                        .saleDate(row.getCell(EXCEL_COL_SALE_DATE).getLocalDateTimeCellValue().toLocalDate())
+                        .quantity(BigDecimal.valueOf(row.getCell(EXCEL_COL_QUANTITY).getNumericCellValue()))
+                        .unitPrice(BigDecimal.valueOf(row.getCell(EXCEL_COL_UNIT_PRICE).getNumericCellValue()))
                         .build();
+                        
                     registerSale(dto);
                     result.setSuccessCount(result.getSuccessCount() + 1);
                 } catch (Exception e) {
+                    log.warn("Помилка імпорту Excel у рядку {}: {}", i + 1, e.getMessage());
                     result.addError(i + 1, e.getMessage());
                 }
             }
         } catch (Exception e) {
-            result.addError(0, "Ошибка чтения файла: " + e.getMessage());
+            log.error("Критична помилка читання Excel файлу: {}", e.getMessage());
+            result.addError(0, "Помилка читання файлу: " + e.getMessage());
         }
 
+        log.info("Імпорт з Excel завершено. Успішно: {}/{}", result.getSuccessCount(), result.getTotalRows());
         return result;
     }
 }
