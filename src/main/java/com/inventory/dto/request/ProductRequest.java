@@ -13,7 +13,7 @@ public class ProductRequest {
     @NotBlank @Size(max = 200)
     private String name;
  
-    @NotNull
+    
     private Long categoryId;
  
     @NotNull
