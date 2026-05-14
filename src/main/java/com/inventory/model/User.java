@@ -23,7 +23,7 @@ public class User extends BaseEntity {
     private String email;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(nullable = false, length = 20, columnDefinition = "user_role_enum")
     private UserRole role;
 
     @Column(nullable = false)
