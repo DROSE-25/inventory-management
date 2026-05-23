@@ -1,0 +1,9 @@
+ALTER TABLE abc_xyz_results
+    ALTER COLUMN abc_class TYPE VARCHAR(1),
+    ALTER COLUMN xyz_class TYPE VARCHAR(1);
+
+ALTER TABLE abc_xyz_results
+    ADD COLUMN IF NOT EXISTS calculated_at TIMESTAMPTZ DEFAULT NOW(),
+    ADD COLUMN IF NOT EXISTS revenue NUMERIC(14,2),
+    ADD COLUMN IF NOT EXISTS period_from DATE,
+    ADD COLUMN IF NOT EXISTS period_to DATE;
