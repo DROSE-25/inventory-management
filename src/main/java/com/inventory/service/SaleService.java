@@ -46,6 +46,24 @@ public class SaleService {
     private final ProductRepository productRepository;
     private final WarehouseRepository warehouseRepository;
 
+    @Transactional(readOnly = true)
+    public List<SaleResponse> getAll() {
+        return saleRepository.findAll()
+            .stream()
+            .map(SaleMapper::toDTO)
+            .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<SaleResponse> getByDateRange(LocalDate from, LocalDate to) {
+        log.debug("Отримання списку продажів за період з {} по {}", from, to);
+        return saleRepository
+            .findBySaleDateBetweenOrderBySaleDateDesc(from, to)
+            .stream()
+            .map(SaleMapper::toDTO)
+            .toList();
+    }
+
     public SaleResponse registerSale(SaleRequest dto) {
         log.info("Реєстрація продажу: товар ID={}, склад ID={}, кількість={}", 
                 dto.getProductId(), dto.getWarehouseId(), dto.getQuantity());

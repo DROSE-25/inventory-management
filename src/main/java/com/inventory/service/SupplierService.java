@@ -47,6 +47,21 @@ public class SupplierService {
         s.setIsActive(false);
         supplierRepository.save(s);
     }
+
+    @Transactional
+    public SupplierResponse update(Long id, SupplierRequest dto) {
+        Supplier s = supplierRepository.findById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("Supplier", id));
+
+        s.setName(dto.getName());
+        s.setContactPerson(dto.getContactPerson());
+        s.setPhone(dto.getPhone());
+        s.setEmail(dto.getEmail());
+        s.setLeadTimeDays(dto.getLeadTimeDays());
+        s.setMinOrderAmount(dto.getMinOrderAmount());
+
+        return toResponse(supplierRepository.save(s));
+    }
  
     private SupplierResponse toResponse(Supplier s) {
         return SupplierResponse.builder()

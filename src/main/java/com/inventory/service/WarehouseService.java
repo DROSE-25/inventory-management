@@ -1,5 +1,5 @@
 package com.inventory.service;
- 
+
 import com.inventory.dto.request.WarehouseRequest;
 import com.inventory.dto.response.WarehouseResponse;
 import com.inventory.exception.ResourceNotFoundException;
@@ -9,23 +9,23 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
- 
+
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class WarehouseService {
- 
+
     private final WarehouseRepository warehouseRepository;
- 
+
     public List<WarehouseResponse> findAll() {
         return warehouseRepository.findAll().stream().map(this::toResponse).toList();
     }
- 
+
     public WarehouseResponse findById(Long id) {
         return toResponse(warehouseRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Warehouse", id)));
     }
- 
+
     @Transactional
     public WarehouseResponse create(WarehouseRequest request) {
         Warehouse w = Warehouse.builder()
@@ -36,7 +36,12 @@ public class WarehouseService {
             .build();
         return toResponse(warehouseRepository.save(w));
     }
- 
+
+    @Transactional
+    public void delete(Long id) {
+        warehouseRepository.deleteById(id);
+    }
+
     private WarehouseResponse toResponse(Warehouse w) {
         return WarehouseResponse.builder()
             .id(w.getId()).name(w.getName())

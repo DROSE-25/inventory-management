@@ -1,0 +1,1 @@
+{"accessToken":"eyJhbGciOiJIUzUxMiJ9.eyJyb2xlIjoiUk9MRV9BRE1JTiIsInN1YiI6ImFkbWluIiwiaWF0IjoxNzc5ODcyMDQ4LCJleHAiOjE3Nzk4NzU2NDh9.hiDwuc7q9OlLoKHaiFWbsONrTDNMIq-mSWRa8gnTU7KRFhcqeTE0N1W199jx2Y2_TaFnG6f2D5kT5JejSVnXjA","tokenType":"Bearer","expiresIn":3600000,"username":"admin","role":"ROLE_ADMIN"}

@@ -24,7 +24,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/inventory_db
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres
-      JWT_SECRET: your-secret-key-change-in-production
+      JWT_SECRET: this-is-a-very-long-secret-key-for-inventory-management-system-2024-diploma
     depends_on:
       postgres:
         condition: service_healthy

@@ -14,6 +14,8 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
 
     // --- Методы из первого фрагмента ---
 
+    List<Sale> findBySaleDateBetweenOrderBySaleDateDesc(LocalDate from, LocalDate to);
+
     List<Sale> findByProductIdAndSaleDateBetweenOrderBySaleDateAsc(
         Long productId, LocalDate from, LocalDate to);
 

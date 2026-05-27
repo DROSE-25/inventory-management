@@ -23,17 +23,25 @@ public class UserController {
     private final UserRepository  userRepository;
     private final PasswordEncoder passwordEncoder;
 
+    record UserDto(Long id, String username, String email, String role, Boolean isActive) {}
+
+    private UserDto toDto(User u) {
+        return new UserDto(u.getId(), u.getUsername(), u.getEmail(),
+            u.getRole().name(), u.getIsActive());
+    }
+
     @Operation(summary = "Список всіх користувачів")
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<List<User>> getAll() {
-        return ResponseEntity.ok(userRepository.findAll());
+    public ResponseEntity<List<UserDto>> getAll() {
+        return ResponseEntity.ok(
+            userRepository.findAll().stream().map(this::toDto).toList());
     }
 
     @Operation(summary = "Створити нового користувача")
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<User> create(@RequestBody CreateUserRequest request) {
+    public ResponseEntity<UserDto> create(@RequestBody CreateUserRequest request) {
         if (userRepository.findByUsername(request.getUsername()).isPresent()) {
             return ResponseEntity.badRequest().build();
         }
@@ -45,7 +53,7 @@ public class UserController {
         user.setIsActive(true);
         user.setCreatedAt(OffsetDateTime.now());
         user.setUpdatedAt(OffsetDateTime.now());
-        return ResponseEntity.ok(userRepository.save(user));
+        return ResponseEntity.ok(toDto(userRepository.save(user)));
     }
 
     @Operation(summary = "Деактивувати користувача")
