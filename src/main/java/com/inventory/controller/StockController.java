@@ -23,6 +23,12 @@ public class StockController {
         return stockService.findBelowReorderPoint();
     }
  
+    @GetMapping("/warehouse/{warehouseId}")
+    @Operation(summary = "Всі залишки на конкретному складі")
+    public List<StockLevelResponse> findByWarehouse(@PathVariable Long warehouseId) {
+        return stockService.findByWarehouse(warehouseId);
+    }
+
     @GetMapping("/product/{productId}/warehouse/{warehouseId}")
     @Operation(summary = "Залишок конкретного товару на складі")
     public StockLevelResponse findStock(@PathVariable Long productId,

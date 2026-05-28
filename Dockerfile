@@ -7,6 +7,11 @@ RUN mvn package -DskipTests -B
 
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
+# Install font packages for Cyrillic PDF support
+RUN apk add --no-cache \
+    ttf-dejavu \
+    fontconfig \
+    && fc-cache -f
 COPY --from=build /app/target/*.jar app.jar
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]

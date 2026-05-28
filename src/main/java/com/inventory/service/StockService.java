@@ -26,6 +26,16 @@ public class StockService {
             .stream().map(this::toResponse).toList();
     }
  
+    public List<StockLevelResponse> findByWarehouse(Long warehouseId) {
+        return stockLevelRepository.findAll()
+            .stream()
+            .filter(s -> s.getWarehouse().getId().equals(warehouseId))
+            .filter(s -> s.getQuantity().compareTo(BigDecimal.ZERO) > 0)
+            .sorted((a, b) -> b.getQuantity().compareTo(a.getQuantity()))
+            .map(this::toResponse)
+            .toList();
+    }
+
     public StockLevelResponse findByProductAndWarehouse(Long productId, Long warehouseId) {
         return stockLevelRepository.findByProductIdAndWarehouseId(productId, warehouseId)
             .map(this::toResponse)

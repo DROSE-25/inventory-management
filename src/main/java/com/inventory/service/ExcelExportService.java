@@ -55,7 +55,14 @@ public class ExcelExportService {
                 row.createCell(6).setCellValue(r.getRevenue() != null ? r.getRevenue().doubleValue() : 0);
                 row.createCell(7).setCellValue(r.getRevenueShare() != null ? r.getRevenueShare().multiply(java.math.BigDecimal.valueOf(100)).doubleValue() : 0);
                 row.createCell(8).setCellValue(r.getCv() != null ? r.getCv().doubleValue() : 0);
-                row.createCell(9).setCellValue("Дивись рекомендацію");
+                String rec = "";
+                String combined = r.getCombinedClass() != null ? r.getCombinedClass() : "";
+                if (combined.startsWith("A")) rec = "Пріоритетний товар. Постійний контроль залишків, мінімальний страховий запас.";
+                else if (combined.startsWith("B")) rec = "Середній пріоритет. Регулярний моніторинг, помірний страховий запас.";
+                else rec = "Низький пріоритет. Можливе скорочення асортименту або замовлення за потребою.";
+                if (combined.endsWith("Z")) rec += " Попит нестабільний — замовляти обережно.";
+                else if (combined.endsWith("X")) rec += " Попит стабільний — можна планувати автоматично.";
+                row.createCell(9).setCellValue(rec);
             }
 
             ByteArrayOutputStream out = new ByteArrayOutputStream();

@@ -61,6 +61,12 @@ public class SaleController {
         }
     }
 
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    public void delete(@PathVariable Long id) {
+        saleService.deleteSale(id);
+    }
+
     @GetMapping("/aggregate")
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER', 'ANALYST')")
     public List<SalesAggregationPoint> aggregate(

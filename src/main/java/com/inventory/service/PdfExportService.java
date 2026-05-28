@@ -4,6 +4,7 @@ import com.inventory.model.AbcXyzResult;
 import com.inventory.repository.AbcXyzResultRepository;
 import com.itextpdf.text.*;
 import com.itextpdf.text.pdf.*;
+import com.itextpdf.text.BaseColor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,9 +28,11 @@ public class PdfExportService {
         PdfWriter.getInstance(doc, out);
         doc.open();
 
-        Font titleFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 16);
-        Font headerFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 10);
-        Font cellFont = FontFactory.getFont(FontFactory.HELVETICA, 9);
+        BaseFont bf = BaseFont.createFont(BaseFont.HELVETICA, "Cp1252", BaseFont.EMBEDDED);
+        BaseFont bfBold = BaseFont.createFont(BaseFont.HELVETICA_BOLD, "Cp1252", BaseFont.EMBEDDED);
+        Font titleFont  = new Font(bfBold, 16);
+        Font headerFont = new Font(bfBold, 10, Font.NORMAL, BaseColor.WHITE);
+        Font cellFont   = new Font(bf, 9);
 
         Paragraph title = new Paragraph("ABC/XYZ Аналіз товарних запасів", titleFont);
         title.setAlignment(Element.ALIGN_CENTER);

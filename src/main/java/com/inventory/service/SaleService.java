@@ -92,7 +92,19 @@ public class SaleService {
         return SaleMapper.toDTO(savedSale);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
+    public void deleteSale(Long id) {
+        Sale sale = saleRepository.findById(id)
+            .orElseThrow(() -> new ResourceNotFoundException("Sale", id));
+        // Повернути товар на склад
+        stockService.receiveStock(
+            sale.getProduct().getId(),
+            sale.getWarehouse().getId(),
+            sale.getQuantity()
+        );
+        saleRepository.delete(sale);
+    }
+
     public List<SaleResponse> getSalesByProductAndPeriod(Long productId, LocalDate from, LocalDate to) {
         log.debug("Отримання історії продажів для товару ID={} з {} по {}", productId, from, to);
         return saleRepository
