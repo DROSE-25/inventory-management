@@ -9,6 +9,7 @@ public class SaleResponse {
     private Long id;
     private Long productId;
     private String productName;
+    private String unitOfMeasure;
     private Long warehouseId;
     private String warehouseName;
     private LocalDate saleDate;

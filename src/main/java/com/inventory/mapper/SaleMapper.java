@@ -10,6 +10,7 @@ public class SaleMapper {
             .id(sale.getId())
             .productId(sale.getProduct().getId())
             .productName(sale.getProduct().getName())
+            .unitOfMeasure(sale.getProduct().getUnitOfMeasure())
             .warehouseId(sale.getWarehouse().getId())
             .warehouseName(sale.getWarehouse().getName())
             .saleDate(sale.getSaleDate())

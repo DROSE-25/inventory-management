@@ -101,13 +101,18 @@ public class OptimizationService {
         int rop = ropCalculator.calculateFromMonthlyDemand(
             forecastedMonthlyDemand, leadTime, ss);
 
-        // 6. Поточний залишок — сума по всіх складах
-        double currentStock = stockLevelRepository
-            .findAll()
-            .stream()
-            .filter(sl -> sl.getProduct().getId().equals(productId))
+        // 6. Поточний залишок — сума по всіх складах; окремо визначаємо склад з найнижчим залишком
+        List<com.inventory.model.StockLevel> productStockLevels =
+            stockLevelRepository.findByProductIdWithWarehouse(productId);
+
+        double currentStock = productStockLevels.stream()
             .mapToDouble(sl -> sl.getQuantity().doubleValue())
             .sum();
+
+        String warehouseName = productStockLevels.stream()
+            .min(java.util.Comparator.comparingDouble(sl -> sl.getQuantity().doubleValue()))
+            .map(sl -> sl.getWarehouse().getName())
+            .orElse("—");
 
         boolean needsReorder = currentStock <= rop;
 
@@ -131,6 +136,8 @@ public class OptimizationService {
         return OptimizationRecommendation.builder()
             .productId(productId)
             .productName(product.getName())
+            .sku(product.getSku())
+            .warehouseName(warehouseName)
             .forecastMethod(forecastMethod)
             .forecastedMonthlyDemand(forecastedMonthlyDemand)
             .forecastMape(forecastMape)

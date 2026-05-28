@@ -12,6 +12,9 @@ public interface StockLevelRepository extends JpaRepository<StockLevel, Long> {
 
     Optional<StockLevel> findByProductIdAndWarehouseId(Long productId, Long warehouseId);
 
+    @Query("SELECT s FROM StockLevel s JOIN FETCH s.warehouse WHERE s.product.id = :productId")
+    List<StockLevel> findByProductIdWithWarehouse(@Param("productId") Long productId);
+
     @Query("SELECT s FROM StockLevel s WHERE s.reorderPoint IS NOT NULL AND s.quantity <= s.reorderPoint")
     List<StockLevel> findBelowReorderPoint();
 

@@ -9,6 +9,8 @@ public class OptimizationRecommendation {
 
     private Long   productId;
     private String productName;
+    private String sku;
+    private String warehouseName;      // склад з найнижчим залишком
     private String forecastMethod;     // який метод прогнозування використано
 
     // Прогнозні дані
