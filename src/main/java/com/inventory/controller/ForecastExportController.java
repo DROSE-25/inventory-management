@@ -1,40 +1,31 @@
 package com.inventory.controller;
 
+import com.inventory.forecast.ForecastService;
+import com.inventory.forecast.dto.DataPoint;
+import com.inventory.forecast.model.ForecastResult;
 import com.inventory.optimization.OptimizationService;
 import com.inventory.optimization.dto.OptimizationRecommendation;
 import com.inventory.repository.ProductRepository;
-import com.itextpdf.text.BaseColor;
-import com.itextpdf.text.Chunk;
-import com.itextpdf.text.Document;
-import com.itextpdf.text.Element;
-import com.itextpdf.text.PageSize;
-import com.itextpdf.text.Paragraph;
-import com.itextpdf.text.Phrase;
-import com.itextpdf.text.pdf.PdfPCell;
-import com.itextpdf.text.pdf.PdfPTable;
-import com.itextpdf.text.pdf.PdfWriter;
+import com.inventory.repository.SaleRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
-import org.apache.poi.ss.usermodel.Cell;
-import org.apache.poi.ss.usermodel.CellStyle;
-import org.apache.poi.ss.usermodel.FillPatternType;
-import org.apache.poi.ss.usermodel.HorizontalAlignment;
-import org.apache.poi.ss.usermodel.IndexedColors;
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.ByteArrayOutputStream;
 import java.time.LocalDate;
+import java.util.Comparator;
+import java.util.DoubleSummaryStatistics;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/forecast-export")
@@ -44,6 +35,73 @@ public class ForecastExportController {
 
     private final OptimizationService optimizationService;
     private final ProductRepository productRepository;
+    private final SaleRepository saleRepository;
+    private final ForecastService forecastService;
+
+    // ── Style helpers ─────────────────────────────────────────────────────────
+
+    private CellStyle makeHeaderStyle(Workbook wb) {
+        CellStyle s = wb.createCellStyle();
+        Font f = wb.createFont(); f.setBold(true); f.setColor(IndexedColors.WHITE.getIndex());
+        s.setFont(f);
+        s.setFillForegroundColor(IndexedColors.DARK_BLUE.getIndex());
+        s.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        s.setAlignment(HorizontalAlignment.CENTER);
+        return s;
+    }
+
+    private CellStyle makeTitleStyle(Workbook wb, short size) {
+        CellStyle s = wb.createCellStyle();
+        Font f = wb.createFont(); f.setBold(true); f.setFontHeightInPoints(size);
+        s.setFont(f);
+        return s;
+    }
+
+    private CellStyle makeAltStyle(Workbook wb) {
+        CellStyle s = wb.createCellStyle();
+        s.setFillForegroundColor(IndexedColors.LIGHT_TURQUOISE.getIndex());
+        s.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        return s;
+    }
+
+    private CellStyle makeLabelStyle(Workbook wb) {
+        CellStyle s = wb.createCellStyle();
+        Font f = wb.createFont(); f.setBold(true); f.setColor(IndexedColors.DARK_BLUE.getIndex());
+        s.setFont(f);
+        return s;
+    }
+
+    private CellStyle makeGreenStyle(Workbook wb) {
+        CellStyle s = wb.createCellStyle();
+        Font f = wb.createFont(); f.setBold(true); f.setColor(IndexedColors.WHITE.getIndex());
+        s.setFont(f);
+        s.setFillForegroundColor(IndexedColors.GREEN.getIndex());
+        s.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        return s;
+    }
+
+    private CellStyle makeOrangeStyle(Workbook wb) {
+        CellStyle s = wb.createCellStyle();
+        Font f = wb.createFont(); f.setBold(true); f.setColor(IndexedColors.WHITE.getIndex());
+        s.setFont(f);
+        s.setFillForegroundColor(IndexedColors.ORANGE.getIndex());
+        s.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        return s;
+    }
+
+    private void setCell(Row row, int col, String value, CellStyle style) {
+        Cell cell = row.createCell(col);
+        cell.setCellValue(value != null ? value : "—");
+        if (style != null) cell.setCellStyle(style);
+    }
+
+    private void setNumCell(Row row, int col, double value, CellStyle style) {
+        Cell cell = row.createCell(col);
+        cell.setCellValue(value);
+        if (style != null) cell.setCellStyle(style);
+    }
+
+    // ── 1. Критичні залишки ───────────────────────────────────────────────────
 
     @Operation(summary = "Завантажити критичні залишки у Excel")
     @GetMapping("/excel/reorder")
@@ -52,173 +110,311 @@ public class ForecastExportController {
         List<OptimizationRecommendation> data = productRepository.findAll().stream()
             .map(p -> optimizationService.getRecommendation(p.getId()))
             .filter(OptimizationRecommendation::isNeedsReorder)
-            .collect(java.util.stream.Collectors.toList());
+            .collect(Collectors.toList());
 
         try (Workbook wb = new XSSFWorkbook()) {
             Sheet sheet = wb.createSheet("Критичні залишки");
+            CellStyle hdr = makeHeaderStyle(wb);
+            CellStyle ttl = makeTitleStyle(wb, (short) 14);
+            CellStyle alt = makeAltStyle(wb);
 
-            // Header style
-            CellStyle headerStyle = wb.createCellStyle();
-            org.apache.poi.ss.usermodel.Font headerFont = wb.createFont();
-            headerFont.setBold(true);
-            headerFont.setColor(IndexedColors.WHITE.getIndex());
-            headerStyle.setFont(headerFont);
-            headerStyle.setFillForegroundColor(IndexedColors.DARK_BLUE.getIndex());
-            headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-            headerStyle.setAlignment(HorizontalAlignment.CENTER);
-
-            // Alt row style
-            CellStyle altStyle = wb.createCellStyle();
-            altStyle.setFillForegroundColor(IndexedColors.LIGHT_TURQUOISE.getIndex());
-            altStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
-
-            // Title row
             Row titleRow = sheet.createRow(0);
-            Cell titleCell = titleRow.createCell(0);
-            titleCell.setCellValue("Звіт: Критичні залишки та рекомендації EOQ");
-            CellStyle titleStyle = wb.createCellStyle();
-            org.apache.poi.ss.usermodel.Font titleFont = wb.createFont();
-            titleFont.setBold(true);
-            titleFont.setFontHeightInPoints((short) 14);
-            titleStyle.setFont(titleFont);
-            titleCell.setCellStyle(titleStyle);
+            Cell tc = titleRow.createCell(0);
+            tc.setCellValue("Звіт: Критичні залишки та рекомендації EOQ");
+            tc.setCellStyle(ttl);
             sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, 7));
 
             Row dateRow = sheet.createRow(1);
             dateRow.createCell(0).setCellValue("Дата звіту: " + LocalDate.now());
             dateRow.createCell(4).setCellValue("Всього позицій: " + data.size());
             sheet.addMergedRegion(new CellRangeAddress(1, 1, 0, 3));
-
-            // Empty row
             sheet.createRow(2);
 
-            // Headers
             String[] cols = {"Товар", "SKU", "Склад", "Залишок", "ROP", "EOQ", "Страх. запас", "Рекомендація"};
             Row header = sheet.createRow(3);
             for (int i = 0; i < cols.length; i++) {
-                Cell cell = header.createCell(i);
-                cell.setCellValue(cols[i]);
-                cell.setCellStyle(headerStyle);
+                Cell cell = header.createCell(i); cell.setCellValue(cols[i]); cell.setCellStyle(hdr);
                 sheet.setColumnWidth(i, i == 7 ? 15000 : 4500);
             }
 
-            // Data rows
             int rowNum = 4;
             for (OptimizationRecommendation r : data) {
                 Row row = sheet.createRow(rowNum);
-                CellStyle style = (rowNum % 2 == 0) ? altStyle : null;
-
-                String[] vals = {
-                    r.getProductName(), r.getSku(),
+                CellStyle style = (rowNum % 2 == 0) ? alt : null;
+                String[] vals = { r.getProductName(), r.getSku(),
                     r.getWarehouseName() != null ? r.getWarehouseName() : "—",
-                    String.valueOf(r.getCurrentStock()),
-                    String.valueOf(r.getReorderPoint()),
-                    String.valueOf(r.getEoq()),
-                    String.valueOf(r.getSafetyStock()),
-                    r.getRecommendation()
-                };
-                for (int i = 0; i < vals.length; i++) {
-                    Cell cell = row.createCell(i);
-                    cell.setCellValue(vals[i]);
-                    if (style != null) cell.setCellStyle(style);
-                }
+                    String.valueOf(r.getCurrentStock()), String.valueOf(r.getReorderPoint()),
+                    String.valueOf(r.getEoq()), String.valueOf(r.getSafetyStock()), r.getRecommendation() };
+                for (int i = 0; i < vals.length; i++) setCell(row, i, vals[i], style);
                 rowNum++;
             }
 
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             wb.write(out);
             return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=reorder_alerts.xlsx")
-                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                    "attachment; filename=reorder_alerts_" + LocalDate.now() + ".xlsx")
+                .contentType(MediaType.parseMediaType(
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
                 .body(out.toByteArray());
         }
     }
 
-    @Operation(summary = "Завантажити критичні залишки у PDF")
-    @GetMapping("/pdf/reorder")
+    // ── 2. Прогноз конкретного товару ─────────────────────────────────────────
+
+    @Operation(summary = "Завантажити прогноз для конкретного товару у Excel")
+    @GetMapping("/excel/forecast/{productId}")
     @PreAuthorize("hasAnyRole('ADMIN','ANALYST','MANAGER')")
-    public ResponseEntity<byte[]> downloadReorderPdf() throws Exception {
-        List<OptimizationRecommendation> data = productRepository.findAll().stream()
-            .map(p -> optimizationService.getRecommendation(p.getId()))
-            .filter(OptimizationRecommendation::isNeedsReorder)
-            .collect(java.util.stream.Collectors.toList());
+    @Transactional(readOnly = true)
+    public ResponseEntity<byte[]> downloadForecastExcel(
+            @PathVariable Long productId,
+            @RequestParam(defaultValue = "30") int horizon) throws Exception {
 
-        Document doc = new Document(PageSize.A4.rotate());
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        PdfWriter.getInstance(doc, out);
-        doc.open();
+        var product = productRepository.findById(productId)
+            .orElseThrow(() -> new IllegalArgumentException("Product not found: " + productId));
 
-        // Load Ubuntu font from classpath (supports Cyrillic)
-        java.io.InputStream isReg  = getClass().getResourceAsStream("/static/Ubuntu-Regular.ttf");
-        java.io.InputStream isBold = getClass().getResourceAsStream("/static/Ubuntu-Bold.ttf");
-        com.itextpdf.text.pdf.BaseFont bf, bfBold;
-        if (isReg != null && isBold != null) {
-            byte[] reg  = isReg.readAllBytes();
-            byte[] bold = isBold.readAllBytes();
-            bf     = com.itextpdf.text.pdf.BaseFont.createFont("/static/Ubuntu-Regular.ttf", com.itextpdf.text.pdf.BaseFont.IDENTITY_H, true, true, reg, null);
-            bfBold = com.itextpdf.text.pdf.BaseFont.createFont("/static/Ubuntu-Bold.ttf",    com.itextpdf.text.pdf.BaseFont.IDENTITY_H, true, true, bold, null);
-        } else {
-            bf     = com.itextpdf.text.pdf.BaseFont.createFont(com.itextpdf.text.pdf.BaseFont.HELVETICA,      "Cp1252", false);
-            bfBold = com.itextpdf.text.pdf.BaseFont.createFont(com.itextpdf.text.pdf.BaseFont.HELVETICA_BOLD, "Cp1252", false);
-        }
-        com.itextpdf.text.Font titleFont    = new com.itextpdf.text.Font(bfBold, 16);
-        com.itextpdf.text.Font subtitleFont = new com.itextpdf.text.Font(bf, 10, com.itextpdf.text.Font.NORMAL, BaseColor.GRAY);
-        com.itextpdf.text.Font headerFont   = new com.itextpdf.text.Font(bfBold, 9, com.itextpdf.text.Font.NORMAL, BaseColor.WHITE);
-        com.itextpdf.text.Font cellFont     = new com.itextpdf.text.Font(bf, 9);
-        com.itextpdf.text.Font boldFont     = new com.itextpdf.text.Font(bfBold, 9);
+        LocalDate to   = LocalDate.now();
+        LocalDate from = to.minusDays(90);
 
-        // Title
-        Paragraph title = new Paragraph("Звіт: Критичні залишки та рекомендації EOQ", titleFont);
-        title.setAlignment(Element.ALIGN_CENTER);
-        doc.add(title);
-        doc.add(new Paragraph("Дата: " + LocalDate.now() + "   |   Позицій: " + data.size(), subtitleFont));
-        doc.add(Chunk.NEWLINE);
+        List<DataPoint> history = saleRepository
+            .findByProductIdAndSaleDateBetweenOrderBySaleDateAsc(productId, from, to)
+            .stream()
+            .map(s -> new DataPoint(s.getSaleDate(), s.getQuantity().doubleValue()))
+            .collect(Collectors.toList());
 
-        // Table
-        PdfPTable table = new PdfPTable(7);
-        table.setWidthPercentage(100);
-        table.setWidths(new float[]{3f, 1.5f, 2f, 1.2f, 1.2f, 1.2f, 4f});
+        if (history.size() < 2) return ResponseEntity.badRequest().build();
 
-        BaseColor headerBg = new BaseColor(15, 23, 42);
-        String[] headers = {"Товар", "SKU", "Склад", "Залишок", "ROP", "EOQ", "Рекомендація"};
-        for (String h : headers) {
-            PdfPCell cell = new PdfPCell(new Phrase(h, headerFont));
-            cell.setBackgroundColor(headerBg);
-            cell.setPadding(6);
-            cell.setHorizontalAlignment(Element.ALIGN_CENTER);
-            table.addCell(cell);
-        }
+        // Run all methods
+        List<ForecastResult> allResults = forecastService.getAvailableMethods().stream()
+            .map(name -> {
+                try { return forecastService.runForecast(name, history, horizon); }
+                catch (Exception e) { return null; }
+            })
+            .filter(r -> r != null && !Double.isNaN(r.getMape()))
+            .sorted(Comparator.comparingDouble(ForecastResult::getMape))
+            .collect(Collectors.toList());
 
-        BaseColor altBg = new BaseColor(241, 245, 249);
-        int i = 0;
-        for (OptimizationRecommendation r : data) {
-            BaseColor bg = (i % 2 == 0) ? BaseColor.WHITE : altBg;
-            String[] vals = {
-                r.getProductName(), r.getSku(),
-                r.getWarehouseName() != null ? r.getWarehouseName() : "—",
-                String.valueOf(r.getCurrentStock()),
-                String.valueOf(r.getReorderPoint()),
-                String.valueOf(r.getEoq()),
-                r.getRecommendation() != null ? r.getRecommendation().split(":")[0] : "—"
+        ForecastResult best = allResults.isEmpty() ? null : allResults.get(0);
+
+        // Optimization data
+        OptimizationRecommendation opt = optimizationService.getRecommendation(productId);
+
+        // History stats
+        DoubleSummaryStatistics stats = history.stream()
+            .mapToDouble(DataPoint::getValue).summaryStatistics();
+        double avg = stats.getAverage();
+        double min = stats.getMin();
+        double max = stats.getMax();
+        double stdDev = Math.sqrt(history.stream()
+            .mapToDouble(dp -> Math.pow(dp.getValue() - avg, 2)).average().orElse(0));
+
+        // Trend
+        double totalPeriod = best != null && best.getForecast() != null
+            ? best.getForecast().stream().mapToDouble(DataPoint::getValue).sum() : 0;
+        String trendText = stdDev / avg < 0.15 ? "Стабільний попит"
+            : stdDev / avg < 0.35 ? "Помірна нестабільність" : "Нестабільний попит";
+
+        try (Workbook wb = new XSSFWorkbook()) {
+            CellStyle hdr  = makeHeaderStyle(wb);
+            CellStyle ttl  = makeTitleStyle(wb, (short) 14);
+            CellStyle ttl2 = makeTitleStyle(wb, (short) 11);
+            CellStyle alt  = makeAltStyle(wb);
+            CellStyle lbl  = makeLabelStyle(wb);
+            CellStyle grn  = makeGreenStyle(wb);
+            CellStyle org  = makeOrangeStyle(wb);
+
+            // ── Аркуш 1: Зведення ────────────────────────────────────────────
+            Sheet s1 = wb.createSheet("📋 Зведення");
+
+            int r = 0;
+            Row tr = s1.createRow(r++);
+            Cell tc2 = tr.createCell(0);
+            tc2.setCellValue("ЗВІТ ПРОГНОЗУВАННЯ: " + product.getName().toUpperCase());
+            tc2.setCellStyle(ttl);
+            s1.addMergedRegion(new CellRangeAddress(0, 0, 0, 3));
+
+            s1.createRow(r++).createCell(0)
+                .setCellValue("Товар: " + product.getName() + "  |  SKU: " + product.getSku()
+                    + "  |  Горизонт: " + horizon + " днів  |  Дата: " + LocalDate.now());
+            s1.createRow(r++);
+
+            // Блок 1: Прогноз
+            Row b1 = s1.createRow(r++);
+            Cell b1c = b1.createCell(0); b1c.setCellValue("ПРОГНОЗ ПРОДАЖІВ"); b1c.setCellStyle(hdr);
+            s1.addMergedRegion(new CellRangeAddress(r-1, r-1, 0, 3));
+
+            String[][] forecastRows = {
+                {"Рекомендований метод", best != null ? best.getMethod() : "—"},
+                {"Точність (MAPE)", best != null ? String.format("%.1f%%", best.getMape()) : "—"},
+                {"MAE (середня абс. помилка)", best != null ? String.format("%.1f шт", best.getMae()) : "—"},
+                {"RMSE", best != null ? String.format("%.1f", best.getRmse()) : "—"},
+                {"Прогноз на " + horizon + " днів (всього)", String.format("%.0f шт", totalPeriod)},
+                {"Прогноз на тиждень (середнє)", String.format("%.0f шт/тиж", totalPeriod / (horizon / 7.0))},
+                {"Прогноз на день (середнє)", String.format("%.1f шт/день", totalPeriod / horizon)},
             };
-            for (int j = 0; j < vals.length; j++) {
-                PdfPCell cell = new PdfPCell(new Phrase(vals[j], j == 3 && r.isNeedsReorder() ? boldFont : cellFont));
-                cell.setBackgroundColor(bg);
-                if (j == 3 && r.isNeedsReorder()) {
-                    cell.setBackgroundColor(new BaseColor(254, 226, 226));
-                }
-                cell.setPadding(5);
-                table.addCell(cell);
+            for (String[] pair : forecastRows) {
+                Row row = s1.createRow(r++);
+                Cell c0 = row.createCell(0); c0.setCellValue(pair[0]); c0.setCellStyle(lbl);
+                row.createCell(1).setCellValue(pair[1]);
             }
-            i++;
+            s1.createRow(r++);
+
+            // Блок 2: Статистика
+            Row b2 = s1.createRow(r++);
+            Cell b2c = b2.createCell(0); b2c.setCellValue("СТАТИСТИКА (90 ДНІВ)"); b2c.setCellStyle(hdr);
+            s1.addMergedRegion(new CellRangeAddress(r-1, r-1, 0, 3));
+
+            String[][] statsRows = {
+                {"Кількість записів продажів", String.valueOf(history.size())},
+                {"Середні продажі/день", String.format("%.1f шт", avg)},
+                {"Мінімум за день", String.format("%.0f шт", min)},
+                {"Максимум за день", String.format("%.0f шт", max)},
+                {"Стандартне відхилення", String.format("%.1f шт", stdDev)},
+                {"Коефіцієнт варіації (CV)", String.format("%.1f%%", (stdDev / avg) * 100)},
+                {"Характер попиту", trendText},
+            };
+            for (String[] pair : statsRows) {
+                Row row = s1.createRow(r++);
+                Cell c0 = row.createCell(0); c0.setCellValue(pair[0]); c0.setCellStyle(lbl);
+                row.createCell(1).setCellValue(pair[1]);
+            }
+            s1.createRow(r++);
+
+            // Блок 3: Оптимізація запасів
+            Row b3 = s1.createRow(r++);
+            Cell b3c = b3.createCell(0); b3c.setCellValue("ОПТИМІЗАЦІЯ ЗАПАСІВ (EOQ/ROP)"); b3c.setCellStyle(hdr);
+            s1.addMergedRegion(new CellRangeAddress(r-1, r-1, 0, 3));
+
+            boolean needsReorder = opt != null && opt.isNeedsReorder();
+            String[][] optRows = {
+                {"Поточний залишок", opt != null ? opt.getCurrentStock() + " шт" : "—"},
+                {"Точка перезамовлення (ROP)", opt != null ? opt.getReorderPoint() + " шт" : "—"},
+                {"Оптимальний обсяг замовлення (EOQ)", opt != null ? opt.getEoq() + " шт" : "—"},
+                {"Страховий запас", opt != null ? opt.getSafetyStock() + " шт" : "—"},
+                {"Статус", needsReorder ? "⚠ ПОТРІБНЕ ЗАМОВЛЕННЯ" : "✓ Запас достатній"},
+                {"Рекомендація", opt != null && opt.getRecommendation() != null ? opt.getRecommendation() : "—"},
+            };
+            for (String[] pair : optRows) {
+                Row row = s1.createRow(r++);
+                Cell c0 = row.createCell(0); c0.setCellValue(pair[0]); c0.setCellStyle(lbl);
+                Cell c1 = row.createCell(1); c1.setCellValue(pair[1]);
+                if (pair[0].equals("Статус")) {
+                    c1.setCellStyle(needsReorder ? org : grn);
+                }
+            }
+
+            s1.setColumnWidth(0, 10000);
+            s1.setColumnWidth(1, 8000);
+            s1.setColumnWidth(2, 4000);
+            s1.setColumnWidth(3, 4000);
+
+            // ── Аркуш 2: Прогноз по датах ────────────────────────────────────
+            if (best != null && best.getForecast() != null) {
+                Sheet s2 = wb.createSheet("📈 Прогноз по датах");
+                Row t2 = s2.createRow(0);
+                Cell tc3 = t2.createCell(0);
+                tc3.setCellValue("Прогноз: " + product.getName() + " | Метод: " + best.getMethod()
+                    + " | MAPE: " + String.format("%.1f%%", best.getMape()));
+                tc3.setCellStyle(ttl2);
+                s2.addMergedRegion(new CellRangeAddress(0, 0, 0, 2));
+                s2.createRow(1);
+
+                String[] cols2 = {"Дата", "Прогноз (шт)", "Накопичений підсумок (шт)"};
+                Row h2 = s2.createRow(2);
+                for (int i = 0; i < cols2.length; i++) {
+                    Cell c = h2.createCell(i); c.setCellValue(cols2[i]); c.setCellStyle(hdr);
+                }
+                s2.setColumnWidth(0, 4000); s2.setColumnWidth(1, 4000); s2.setColumnWidth(2, 6000);
+
+                List<DataPoint> pts = best.getForecast();
+                double cumulative = 0;
+                for (int i = 0; i < pts.size(); i++) {
+                    Row row = s2.createRow(3 + i);
+                    CellStyle st = (i % 2 == 0) ? alt : null;
+                    DataPoint dp = pts.get(i);
+                    cumulative += dp.getValue();
+                    setCell(row, 0, dp.getDate() != null ? dp.getDate().toString() : "День " + (i + 1), st);
+                    setCell(row, 1, String.format("%.0f", dp.getValue()), st);
+                    setCell(row, 2, String.format("%.0f", cumulative), st);
+                }
+            }
+
+            // ── Аркуш 3: Порівняння методів ──────────────────────────────────
+            Sheet s3 = wb.createSheet("🔬 Порівняння методів");
+            Row t3 = s3.createRow(0);
+            Cell tc4 = t3.createCell(0);
+            tc4.setCellValue("Порівняння методів: " + product.getName());
+            tc4.setCellStyle(ttl2);
+            s3.addMergedRegion(new CellRangeAddress(0, 0, 0, 5));
+            s3.createRow(1);
+
+            String[] cols3 = {"Метод", "MAE", "MAPE (%)", "RMSE", "Прогноз (сума)", "Статус"};
+            Row h3 = s3.createRow(2);
+            for (int i = 0; i < cols3.length; i++) {
+                Cell c = h3.createCell(i); c.setCellValue(cols3[i]); c.setCellStyle(hdr);
+            }
+            s3.setColumnWidth(0, 6000); s3.setColumnWidth(1, 3500); s3.setColumnWidth(2, 3500);
+            s3.setColumnWidth(3, 3500); s3.setColumnWidth(4, 5000); s3.setColumnWidth(5, 5000);
+
+            for (int i = 0; i < allResults.size(); i++) {
+                ForecastResult res = allResults.get(i);
+                Row row = s3.createRow(3 + i);
+                CellStyle st = (i % 2 == 0) ? alt : null;
+                boolean isBest = best != null && res.getMethod().equals(best.getMethod());
+                double forecastSum = res.getForecast() != null
+                    ? res.getForecast().stream().mapToDouble(DataPoint::getValue).sum() : 0;
+                setCell(row, 0, res.getMethod(), st);
+                setCell(row, 1, String.format("%.2f", res.getMae()), st);
+                setCell(row, 2, String.format("%.1f", res.getMape()), st);
+                setCell(row, 3, String.format("%.2f", res.getRmse()), st);
+                setCell(row, 4, String.format("%.0f шт", forecastSum), st);
+                Cell statusCell = row.createCell(5);
+                statusCell.setCellValue(isBest ? "✓ Найкращий" : "");
+                if (isBest) statusCell.setCellStyle(grn);
+            }
+
+            // ── Аркуш 4: Історія продажів ────────────────────────────────────
+            Sheet s4 = wb.createSheet("📦 Історія продажів");
+            Row t4 = s4.createRow(0);
+            Cell tc5 = t4.createCell(0);
+            tc5.setCellValue("Історія продажів (90 днів): " + product.getName());
+            tc5.setCellStyle(ttl2);
+            s4.addMergedRegion(new CellRangeAddress(0, 0, 0, 2));
+
+            // Summary stats row
+            s4.createRow(1).createCell(0).setCellValue(
+                String.format("Середнє: %.1f  |  Мін: %.0f  |  Макс: %.0f  |  Стд. відхилення: %.1f  |  Всього записів: %d",
+                    avg, min, max, stdDev, history.size()));
+            s4.createRow(2);
+
+            String[] cols4 = {"Дата", "Продано (шт)", "Відхилення від середнього"};
+            Row h4 = s4.createRow(3);
+            for (int i = 0; i < cols4.length; i++) {
+                Cell c = h4.createCell(i); c.setCellValue(cols4[i]); c.setCellStyle(hdr);
+            }
+            s4.setColumnWidth(0, 4000); s4.setColumnWidth(1, 4000); s4.setColumnWidth(2, 7000);
+
+            for (int i = 0; i < history.size(); i++) {
+                Row row = s4.createRow(4 + i);
+                CellStyle st = (i % 2 == 0) ? alt : null;
+                DataPoint dp = history.get(i);
+                double deviation = dp.getValue() - avg;
+                setCell(row, 0, dp.getDate() != null ? dp.getDate().toString() : "—", st);
+                setCell(row, 1, String.format("%.0f", dp.getValue()), st);
+                setCell(row, 2, String.format("%+.1f шт (%.0f%%)", deviation, (deviation / avg) * 100), st);
+            }
+
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            wb.write(out);
+
+            String filename = "forecast_" + product.getName()
+                .replaceAll("[^а-яА-ЯіїєІЇЄa-zA-Z0-9]", "_") + "_" + LocalDate.now() + ".xlsx";
+
+            return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .contentType(MediaType.parseMediaType(
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .body(out.toByteArray());
         }
-
-        doc.add(table);
-        doc.close();
-
-        return ResponseEntity.ok()
-            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=reorder_alerts.pdf")
-            .contentType(MediaType.APPLICATION_PDF)
-            .body(out.toByteArray());
     }
 }
