@@ -177,7 +177,7 @@ CREATE INDEX idx_axr_class          ON abc_xyz_results(combined_class);
 -- ─── SEED: DEFAULT ADMIN USER ────────────────────────────────
 INSERT INTO users (username, password_hash, email, role)
 VALUES ('admin',
-        '$2a$12$xkX1z5Icj7/AkB3hOt0KUORRExSFYNkGMYxhJlFd9nLTEZkFu6kH2',
+        '$2a$12$fHdgFyXLEvLzb9MCTZg.kOSUexGxamPT1cbpPa1cQYW1vdjFh6xHy',
         'admin@inventory.local',
         'ADMIN');
 

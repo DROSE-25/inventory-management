@@ -4,6 +4,8 @@ import com.inventory.model.enums.UserRole;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "users")
@@ -23,9 +25,16 @@ public class User extends BaseEntity {
     private String email;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20, columnDefinition = "user_role_enum")
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(nullable = false, columnDefinition = "user_role_enum")
     private UserRole role;
 
     @Column(nullable = false)
     private Boolean isActive = true;
+
+    @Column(name = "company_id")
+    private Long companyId;
+
+    @Column(name = "full_name", length = 100)
+    private String fullName;
 }
