@@ -20,25 +20,30 @@ public class AbcXyzResult {
     private Product product;
 
     @Column(name = "abc_class", nullable = false, columnDefinition = "VARCHAR(1)")
-private String abcClass;
+    private String abcClass;
 
-@Column(name = "xyz_class", nullable = false, columnDefinition = "VARCHAR(1)")
-private String xyzClass;
+    @Column(name = "xyz_class", nullable = false, columnDefinition = "VARCHAR(1)")
+    private String xyzClass;
 
-@Column(name = "combined_class", nullable = false, columnDefinition = "VARCHAR(2)")
-private String combinedClass; // "AX", "BY", "CZ" ...
+    @Column(name = "combined_class", nullable = false, columnDefinition = "VARCHAR(2)")
+    private String combinedClass;
 
     @Column(precision = 14, scale = 2)
-    private BigDecimal revenue;     // оборот за період
+    private BigDecimal revenue;
 
     @Column(name = "revenue_share", precision = 6, scale = 4)
-    private BigDecimal revenueShare; // частка від загального (0..1)
+    private BigDecimal revenueShare;
 
     @Column(precision = 8, scale = 2)
-    private BigDecimal cv;          // коефіцієнт варіації (%)
+    private BigDecimal cv;
 
     private LocalDate periodFrom;
     private LocalDate periodTo;
 
     private OffsetDateTime calculatedAt;
+
+    // companyId — для ізоляції даних між компаніями
+    // значення береться з product.companyId при збереженні
+    @Column(name = "company_id")
+    private Long companyId;
 }

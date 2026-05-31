@@ -11,6 +11,7 @@ import com.inventory.model.Warehouse;
 import com.inventory.repository.ProductRepository;
 import com.inventory.repository.SaleRepository;
 import com.inventory.repository.WarehouseRepository;
+import com.inventory.security.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.csv.CSVFormat;
@@ -34,47 +35,52 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SaleService {
 
-    // Константи для колонок Excel
-    private static final int EXCEL_COL_PRODUCT_ID = 0;
-    private static final int EXCEL_COL_WAREHOUSE_ID = 1;
-    private static final int EXCEL_COL_SALE_DATE = 2;
-    private static final int EXCEL_COL_QUANTITY = 3;
-    private static final int EXCEL_COL_UNIT_PRICE = 4;
+    private static final int EXCEL_COL_PRODUCT_ID   = 0;
+    private static final int EXCEL_COL_WAREHOUSE_ID  = 1;
+    private static final int EXCEL_COL_SALE_DATE     = 2;
+    private static final int EXCEL_COL_QUANTITY      = 3;
+    private static final int EXCEL_COL_UNIT_PRICE    = 4;
 
-    private final SaleRepository saleRepository;
-    private final StockService stockService;
-    private final ProductRepository productRepository;
+    private final SaleRepository      saleRepository;
+    private final StockService        stockService;
+    private final ProductRepository   productRepository;
     private final WarehouseRepository warehouseRepository;
+    private final SecurityUtils       securityUtils;
 
     @Transactional(readOnly = true)
     public List<SaleResponse> getAll() {
+        Long companyId = securityUtils.getCurrentCompanyId();
         return saleRepository.findAll()
             .stream()
+            .filter(s -> s.getCompanyId().equals(companyId))
             .map(SaleMapper::toDTO)
             .toList();
     }
 
     @Transactional(readOnly = true)
     public List<SaleResponse> getByDateRange(LocalDate from, LocalDate to) {
-        log.debug("Отримання списку продажів за період з {} по {}", from, to);
+        Long companyId = securityUtils.getCurrentCompanyId();
+        log.debug("Отримання продажів за період {} – {} для компанії {}", from, to, companyId);
         return saleRepository
-            .findBySaleDateBetweenOrderBySaleDateDesc(from, to)
+            .findBySaleDateBetweenAndCompanyIdOrderBySaleDateDesc(from, to, companyId)
             .stream()
             .map(SaleMapper::toDTO)
             .toList();
     }
 
     public SaleResponse registerSale(SaleRequest dto) {
-        log.info("Реєстрація продажу: товар ID={}, склад ID={}, кількість={}", 
-                dto.getProductId(), dto.getWarehouseId(), dto.getQuantity());
+        Long companyId = securityUtils.getCurrentCompanyId();
+        log.info("Реєстрація продажу: товар ID={}, склад ID={}, кількість={}, компанія={}",
+            dto.getProductId(), dto.getWarehouseId(), dto.getQuantity(), companyId);
 
         Product product = productRepository.findById(dto.getProductId())
+            .filter(p -> p.getCompanyId().equals(companyId))
             .orElseThrow(() -> new ResourceNotFoundException("Товар", dto.getProductId()));
 
         Warehouse warehouse = warehouseRepository.findById(dto.getWarehouseId())
+            .filter(w -> w.getCompanyId().equals(companyId))
             .orElseThrow(() -> new ResourceNotFoundException("Склад", dto.getWarehouseId()));
 
-        // Зменшуємо залишки на складі
         stockService.deductStock(dto.getProductId(), dto.getWarehouseId(), dto.getQuantity());
 
         Sale sale = Sale.builder()
@@ -84,19 +90,21 @@ public class SaleService {
             .quantity(dto.getQuantity())
             .unitPrice(dto.getUnitPrice())
             .createdAt(OffsetDateTime.now())
+            .companyId(companyId)
             .build();
 
         Sale savedSale = saleRepository.save(sale);
         log.debug("Продаж успішно зареєстровано, ID запису: {}", savedSale.getId());
-        
+
         return SaleMapper.toDTO(savedSale);
     }
 
     @Transactional
     public void deleteSale(Long id) {
+        Long companyId = securityUtils.getCurrentCompanyId();
         Sale sale = saleRepository.findById(id)
+            .filter(s -> s.getCompanyId().equals(companyId))
             .orElseThrow(() -> new ResourceNotFoundException("Sale", id));
-        // Повернути товар на склад
         stockService.receiveStock(
             sale.getProduct().getId(),
             sale.getWarehouse().getId(),
@@ -106,7 +114,13 @@ public class SaleService {
     }
 
     public List<SaleResponse> getSalesByProductAndPeriod(Long productId, LocalDate from, LocalDate to) {
-        log.debug("Отримання історії продажів для товару ID={} з {} по {}", productId, from, to);
+        Long companyId = securityUtils.getCurrentCompanyId();
+        log.debug("Отримання продажів для товару ID={} з {} по {} (компанія {})",
+            productId, from, to, companyId);
+        // перевіряємо що товар належить цій компанії
+        productRepository.findById(productId)
+            .filter(p -> p.getCompanyId().equals(companyId))
+            .orElseThrow(() -> new ResourceNotFoundException("Товар", productId));
         return saleRepository
             .findByProductIdAndSaleDateBetweenOrderBySaleDateAsc(productId, from, to)
             .stream()
@@ -127,7 +141,6 @@ public class SaleService {
 
             List<CSVRecord> records = parser.getRecords();
             result.setTotalRows(records.size());
-            log.info("Знайдено {} рядків для імпорту", records.size());
 
             for (CSVRecord record : records) {
                 row++;
@@ -139,7 +152,6 @@ public class SaleService {
                         .quantity(new BigDecimal(record.get("quantity")))
                         .unitPrice(new BigDecimal(record.get("unit_price")))
                         .build();
-                        
                     registerSale(dto);
                     result.setSuccessCount(result.getSuccessCount() + 1);
                 } catch (Exception e) {
@@ -148,11 +160,11 @@ public class SaleService {
                 }
             }
         } catch (Exception e) {
-            log.error("Критична помилка читання CSV файлу: {}", e.getMessage());
+            log.error("Критична помилка читання CSV: {}", e.getMessage());
             result.addError(row, "Помилка читання файлу: " + e.getMessage());
         }
 
-        log.info("Імпорт з CSV завершено. Успішно: {}/{}", result.getSuccessCount(), result.getTotalRows());
+        log.info("Імпорт CSV завершено. Успішно: {}/{}", result.getSuccessCount(), result.getTotalRows());
         return result;
     }
 
@@ -164,21 +176,18 @@ public class SaleService {
             Sheet sheet = workbook.getSheetAt(0);
             int totalDataRows = sheet.getLastRowNum();
             result.setTotalRows(totalDataRows);
-            log.info("Знайдено {} рядків для імпорту в Excel", totalDataRows);
 
             for (int i = 1; i <= sheet.getLastRowNum(); i++) {
-                Row row = sheet.getRow(i);
-                if (row == null) continue;
-                
+                Row excelRow = sheet.getRow(i);
+                if (excelRow == null) continue;
                 try {
                     SaleRequest dto = SaleRequest.builder()
-                        .productId((long) row.getCell(EXCEL_COL_PRODUCT_ID).getNumericCellValue())
-                        .warehouseId((long) row.getCell(EXCEL_COL_WAREHOUSE_ID).getNumericCellValue())
-                        .saleDate(row.getCell(EXCEL_COL_SALE_DATE).getLocalDateTimeCellValue().toLocalDate())
-                        .quantity(BigDecimal.valueOf(row.getCell(EXCEL_COL_QUANTITY).getNumericCellValue()))
-                        .unitPrice(BigDecimal.valueOf(row.getCell(EXCEL_COL_UNIT_PRICE).getNumericCellValue()))
+                        .productId((long) excelRow.getCell(EXCEL_COL_PRODUCT_ID).getNumericCellValue())
+                        .warehouseId((long) excelRow.getCell(EXCEL_COL_WAREHOUSE_ID).getNumericCellValue())
+                        .saleDate(excelRow.getCell(EXCEL_COL_SALE_DATE).getLocalDateTimeCellValue().toLocalDate())
+                        .quantity(BigDecimal.valueOf(excelRow.getCell(EXCEL_COL_QUANTITY).getNumericCellValue()))
+                        .unitPrice(BigDecimal.valueOf(excelRow.getCell(EXCEL_COL_UNIT_PRICE).getNumericCellValue()))
                         .build();
-                        
                     registerSale(dto);
                     result.setSuccessCount(result.getSuccessCount() + 1);
                 } catch (Exception e) {
@@ -187,11 +196,11 @@ public class SaleService {
                 }
             }
         } catch (Exception e) {
-            log.error("Критична помилка читання Excel файлу: {}", e.getMessage());
+            log.error("Критична помилка читання Excel: {}", e.getMessage());
             result.addError(0, "Помилка читання файлу: " + e.getMessage());
         }
 
-        log.info("Імпорт з Excel завершено. Успішно: {}/{}", result.getSuccessCount(), result.getTotalRows());
+        log.info("Імпорт Excel завершено. Успішно: {}/{}", result.getSuccessCount(), result.getTotalRows());
         return result;
     }
 }

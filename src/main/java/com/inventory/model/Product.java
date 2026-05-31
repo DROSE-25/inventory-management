@@ -14,7 +14,7 @@ public class Product {
     private Long id;
 
     @NotBlank @Size(max = 50)
-    @Column(nullable = false, unique = true, length = 50)
+    @Column(nullable = false, length = 50)
     private String sku;
 
     @NotBlank @Size(max = 200)
@@ -47,4 +47,7 @@ public class Product {
 
     @Column(nullable = false)
     private Boolean isActive = true;
+
+    @Column(name = "company_id", nullable = false)
+    private Long companyId;
 }

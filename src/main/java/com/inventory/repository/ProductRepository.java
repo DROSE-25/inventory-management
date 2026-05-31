@@ -11,13 +11,20 @@ import java.util.List;
 import java.util.Optional;
 
 public interface ProductRepository extends JpaRepository<Product, Long>,
-                                            JpaSpecificationExecutor<Product> {
+                                           JpaSpecificationExecutor<Product> {
 
-    Optional<Product> findBySku(String sku);
-    Page<Product> findByIsActiveTrue(Pageable pageable);
-    List<Product> findByCategoryIdAndIsActiveTrue(Long categoryId);
-    List<Product> findBySupplierIdAndIsActiveTrue(Long supplierId);
+    Optional<Product> findBySkuAndCompanyId(String sku, Long companyId);
 
-    @Query("SELECT p FROM Product p WHERE LOWER(p.name) LIKE LOWER(CONCAT('%',:name,'%')) AND p.isActive = true")
-    List<Product> searchByName(@Param("name") String name);
+    Page<Product> findByIsActiveTrueAndCompanyId(Long companyId, Pageable pageable);
+
+    List<Product> findByCategoryIdAndIsActiveTrueAndCompanyId(Long categoryId, Long companyId);
+
+    List<Product> findBySupplierIdAndIsActiveTrueAndCompanyId(Long supplierId, Long companyId);
+
+    List<Product> findByCompanyId(Long companyId);
+
+    @Query("SELECT p FROM Product p WHERE LOWER(p.name) LIKE LOWER(CONCAT('%',:name,'%')) " +
+           "AND p.isActive = true AND p.companyId = :companyId")
+    List<Product> searchByNameAndCompanyId(@Param("name") String name,
+                                           @Param("companyId") Long companyId);
 }

@@ -1,37 +1,51 @@
 package com.inventory.service;
- 
+
 import com.inventory.dto.response.StockLevelResponse;
 import com.inventory.exception.ResourceNotFoundException;
 import com.inventory.exception.ValidationException;
 import com.inventory.model.StockLevel;
 import com.inventory.repository.*;
+import com.inventory.security.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
- 
+
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class StockService {
- 
+
     private final StockLevelRepository stockLevelRepository;
-    private final ProductRepository productRepository;
-    private final WarehouseRepository warehouseRepository;
- 
+    private final ProductRepository    productRepository;
+    private final WarehouseRepository  warehouseRepository;
+    private final SecurityUtils        securityUtils;
+
     public List<StockLevelResponse> findBelowReorderPoint() {
-        return stockLevelRepository.findBelowReorderPoint()
+        Long companyId = securityUtils.getCurrentCompanyId();
+        return stockLevelRepository.findBelowReorderPointByCompany(companyId)
             .stream().map(this::toResponse).toList();
     }
- 
+
     public List<StockLevelResponse> findByWarehouse(Long warehouseId) {
+        Long companyId = securityUtils.getCurrentCompanyId();
         return stockLevelRepository.findAll()
             .stream()
             .filter(s -> s.getWarehouse().getId().equals(warehouseId))
+            .filter(s -> s.getProduct().getCompanyId().equals(companyId))
             .filter(s -> s.getQuantity().compareTo(BigDecimal.ZERO) > 0)
             .sorted((a, b) -> b.getQuantity().compareTo(a.getQuantity()))
+            .map(this::toResponse)
+            .toList();
+    }
+
+    /** Всі склади де є цей товар (quantity > 0) */
+    public List<StockLevelResponse> findByProduct(Long productId) {
+        return stockLevelRepository.findByProductIdWithWarehouse(productId)
+            .stream()
+            .filter(s -> s.getQuantity().compareTo(BigDecimal.ZERO) > 0)
             .map(this::toResponse)
             .toList();
     }
@@ -41,8 +55,7 @@ public class StockService {
             .map(this::toResponse)
             .orElseThrow(() -> new ResourceNotFoundException("StockLevel не знайдено"));
     }
- 
-    // Надходження товару на склад
+
     @Transactional
     public StockLevelResponse receiveStock(Long productId, Long warehouseId, BigDecimal quantity) {
         if (quantity.compareTo(BigDecimal.ZERO) <= 0) {
@@ -53,8 +66,7 @@ public class StockService {
         stock.setUpdatedAt(OffsetDateTime.now());
         return toResponse(stockLevelRepository.save(stock));
     }
- 
-    // Списання товару зі складу
+
     @Transactional
     public StockLevelResponse deductStock(Long productId, Long warehouseId, BigDecimal quantity) {
         StockLevel stock = getOrCreate(productId, warehouseId);
@@ -65,7 +77,7 @@ public class StockService {
         stock.setUpdatedAt(OffsetDateTime.now());
         return toResponse(stockLevelRepository.save(stock));
     }
- 
+
     private StockLevel getOrCreate(Long productId, Long warehouseId) {
         return stockLevelRepository.findByProductIdAndWarehouseId(productId, warehouseId)
             .orElseGet(() -> {
@@ -79,7 +91,7 @@ public class StockService {
                 return s;
             });
     }
- 
+
     private StockLevelResponse toResponse(StockLevel s) {
         boolean below = s.getReorderPoint() != null &&
             s.getQuantity().compareTo(s.getReorderPoint()) <= 0;
@@ -98,4 +110,3 @@ public class StockService {
             .build();
     }
 }
-

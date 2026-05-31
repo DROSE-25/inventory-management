@@ -1,6 +1,8 @@
 package com.inventory.controller;
 
+import com.inventory.model.Category;
 import com.inventory.repository.CategoryRepository;
+import com.inventory.security.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -20,12 +22,14 @@ import java.util.stream.Collectors;
 public class CategoryController {
 
     private final CategoryRepository categoryRepository;
+    private final SecurityUtils      securityUtils;
 
-    @Operation(summary = "Список всіх категорій")
+    @Operation(summary = "Список категорій компанії")
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMIN','MANAGER','ANALYST')")
     public ResponseEntity<List<Map<String, Object>>> getAll() {
-        List<Map<String, Object>> result = categoryRepository.findAll()
+        Long companyId = securityUtils.getCurrentCompanyId();
+        List<Map<String, Object>> result = categoryRepository.findByCompanyId(companyId)
             .stream()
             .map(c -> {
                 Map<String, Object> map = new LinkedHashMap<>();
@@ -41,12 +45,25 @@ public class CategoryController {
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, Object>> create(@RequestBody Map<String, String> request) {
-        com.inventory.model.Category category = new com.inventory.model.Category();
+        Long companyId = securityUtils.getCurrentCompanyId();
+        Category category = new Category();
         category.setName(request.get("name"));
-        com.inventory.model.Category saved = categoryRepository.save(category);
+        category.setCompanyId(companyId);
+        Category saved = categoryRepository.save(category);
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("id", saved.getId());
         map.put("name", saved.getName());
         return ResponseEntity.ok(map);
+    }
+
+    @Operation(summary = "Видалити категорію")
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        Long companyId = securityUtils.getCurrentCompanyId();
+        categoryRepository.findById(id)
+            .filter(c -> c.getCompanyId().equals(companyId))
+            .ifPresent(categoryRepository::delete);
+        return ResponseEntity.noContent().build();
     }
 }

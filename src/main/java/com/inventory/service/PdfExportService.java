@@ -2,6 +2,7 @@ package com.inventory.service;
 
 import com.inventory.model.AbcXyzResult;
 import com.inventory.repository.AbcXyzResultRepository;
+import com.inventory.security.SecurityUtils;
 import com.itextpdf.text.*;
 import com.itextpdf.text.pdf.*;
 import com.itextpdf.text.BaseColor;
@@ -18,17 +19,19 @@ import java.util.List;
 public class PdfExportService {
 
     private final AbcXyzResultRepository abcXyzResultRepository;
+    private final SecurityUtils          securityUtils;
 
     @Transactional(readOnly = true)
     public byte[] exportAbcXyzPdf() throws Exception {
-        List<AbcXyzResult> data = abcXyzResultRepository.findAllByOrderByRevenueDesc();
+        Long companyId = securityUtils.getCurrentCompanyId();
+        List<AbcXyzResult> data = abcXyzResultRepository.findAllByCompanyIdOrderByRevenueDesc(companyId);
 
         Document doc = new Document(PageSize.A4.rotate());
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         PdfWriter.getInstance(doc, out);
         doc.open();
 
-        BaseFont bf = BaseFont.createFont(BaseFont.HELVETICA, "Cp1252", BaseFont.EMBEDDED);
+        BaseFont bf     = BaseFont.createFont(BaseFont.HELVETICA,      "Cp1252", BaseFont.EMBEDDED);
         BaseFont bfBold = BaseFont.createFont(BaseFont.HELVETICA_BOLD, "Cp1252", BaseFont.EMBEDDED);
         Font titleFont  = new Font(bfBold, 16);
         Font headerFont = new Font(bfBold, 10, Font.NORMAL, BaseColor.WHITE);
@@ -45,7 +48,7 @@ public class PdfExportService {
         table.setWidths(new float[]{3f, 1f, 1f, 1.5f, 2f, 1.5f, 5f});
 
         BaseColor headerColor = new BaseColor(30, 84, 150);
-        String[] headers = {"Назва","ABC","XYZ","Оборот","Частка %","CV %","Рекомендація"};
+        String[] headers = {"Назва", "ABC", "XYZ", "Оборот", "Частка %", "CV %", "Рекомендація"};
         for (String h : headers) {
             PdfPCell cell = new PdfPCell(new Phrase(h, headerFont));
             cell.setBackgroundColor(headerColor);
@@ -56,15 +59,17 @@ public class PdfExportService {
 
         boolean alt = false;
         for (AbcXyzResult r : data) {
-            BaseColor rowColor = alt ? new BaseColor(242,247,251) : BaseColor.WHITE;
+            BaseColor rowColor = alt ? new BaseColor(242, 247, 251) : BaseColor.WHITE;
             alt = !alt;
             String[] vals = {
                 r.getProduct().getName(),
                 r.getAbcClass(),
                 r.getXyzClass(),
                 r.getRevenue() != null ? r.getRevenue().toPlainString() : "0",
-                r.getRevenueShare() != null ? r.getRevenueShare().multiply(java.math.BigDecimal.valueOf(100)).setScale(1, java.math.RoundingMode.HALF_UP).toPlainString() + "%" : "0%",
-                r.getCv() != null ? r.getCv().toPlainString() + "%" : "0%" ,
+                r.getRevenueShare() != null
+                    ? r.getRevenueShare().multiply(java.math.BigDecimal.valueOf(100))
+                        .setScale(1, java.math.RoundingMode.HALF_UP).toPlainString() + "%" : "0%",
+                r.getCv() != null ? r.getCv().toPlainString() + "%" : "0%",
                 r.getCombinedClass()
             };
             for (String v : vals) {

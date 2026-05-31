@@ -5,6 +5,7 @@ import com.inventory.dto.response.WarehouseResponse;
 import com.inventory.exception.ResourceNotFoundException;
 import com.inventory.model.Warehouse;
 import com.inventory.repository.WarehouseRepository;
+import com.inventory.security.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,30 +17,44 @@ import java.util.List;
 public class WarehouseService {
 
     private final WarehouseRepository warehouseRepository;
+    private final SecurityUtils       securityUtils;
 
     public List<WarehouseResponse> findAll() {
-        return warehouseRepository.findAll().stream().map(this::toResponse).toList();
+        Long companyId = securityUtils.getCurrentCompanyId();
+        return warehouseRepository.findByCompanyId(companyId)
+            .stream().map(this::toResponse).toList();
     }
 
     public WarehouseResponse findById(Long id) {
-        return toResponse(warehouseRepository.findById(id)
-            .orElseThrow(() -> new ResourceNotFoundException("Warehouse", id)));
+        return toResponse(getWarehouseEntityById(id));
     }
 
     @Transactional
     public WarehouseResponse create(WarehouseRequest request) {
+        Long companyId = securityUtils.getCurrentCompanyId();
         Warehouse w = Warehouse.builder()
             .name(request.getName())
             .address(request.getAddress())
             .capacity(request.getCapacity())
             .isActive(true)
+            .companyId(companyId)
             .build();
         return toResponse(warehouseRepository.save(w));
     }
 
     @Transactional
     public void delete(Long id) {
+        getWarehouseEntityById(id); // перевірка що belongs до цієї компанії
         warehouseRepository.deleteById(id);
+    }
+
+    // ── Допоміжні методи ────────────────────────────────────────
+
+    public Warehouse getWarehouseEntityById(Long id) {
+        Long companyId = securityUtils.getCurrentCompanyId();
+        return warehouseRepository.findById(id)
+            .filter(w -> w.getCompanyId().equals(companyId))
+            .orElseThrow(() -> new ResourceNotFoundException("Warehouse", id));
     }
 
     private WarehouseResponse toResponse(Warehouse w) {

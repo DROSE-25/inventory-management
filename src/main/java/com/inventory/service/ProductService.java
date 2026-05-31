@@ -8,6 +8,7 @@ import com.inventory.model.Category;
 import com.inventory.model.Product;
 import com.inventory.model.Supplier;
 import com.inventory.repository.*;
+import com.inventory.security.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -17,22 +18,25 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
-@Slf4j // Додано для логування
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ProductService {
 
-    // Виносимо магічний рядок у константу
     private static final String DEFAULT_UNIT_OF_MEASURE = "шт";
 
-    private final ProductRepository productRepository;
+    private final ProductRepository  productRepository;
     private final CategoryRepository categoryRepository;
     private final SupplierRepository supplierRepository;
+    private final SecurityUtils      securityUtils;
 
     public Page<ProductResponse> findAll(Pageable pageable) {
-        log.debug("Отримання списку активних товарів, сторінка: {}", pageable.getPageNumber());
-        return productRepository.findByIsActiveTrue(pageable).map(this::toResponse);
+        Long companyId = securityUtils.getCurrentCompanyId();
+        log.debug("Отримання списку активних товарів для компанії {}, сторінка: {}",
+            companyId, pageable.getPageNumber());
+        return productRepository.findByIsActiveTrueAndCompanyId(companyId, pageable)
+            .map(this::toResponse);
     }
 
     public ProductResponse findById(Long id) {
@@ -40,27 +44,31 @@ public class ProductService {
     }
 
     public ProductResponse findBySku(String sku) {
-        return toResponse(productRepository.findBySku(sku)
+        Long companyId = securityUtils.getCurrentCompanyId();
+        return toResponse(productRepository.findBySkuAndCompanyId(sku, companyId)
             .orElseThrow(() -> new ResourceNotFoundException("Товар з SKU '" + sku + "' не знайдено")));
     }
 
     public List<ProductResponse> search(String name) {
-        log.debug("Пошук товарів за назвою: {}", name);
-        return productRepository.searchByName(name).stream().map(this::toResponse).toList();
+        Long companyId = securityUtils.getCurrentCompanyId();
+        log.debug("Пошук товарів за назвою: {} у компанії {}", name, companyId);
+        return productRepository.searchByNameAndCompanyId(name, companyId)
+            .stream().map(this::toResponse).toList();
     }
 
     @Transactional
     public ProductResponse create(ProductRequest request) {
-        log.info("Спроба створення нового товару з SKU: {}", request.getSku());
-        
-        if (productRepository.findBySku(request.getSku()).isPresent()) {
+        Long companyId = securityUtils.getCurrentCompanyId();
+        log.info("Спроба створення нового товару з SKU: {} для компанії {}", request.getSku(), companyId);
+
+        if (productRepository.findBySkuAndCompanyId(request.getSku(), companyId).isPresent()) {
             log.warn("Помилка створення: товар з SKU '{}' вже існує", request.getSku());
             throw new ValidationException("Товар з SKU '" + request.getSku() + "' вже існує");
         }
-        
-        Product product = fromRequest(request);
+
+        Product product = fromRequest(request, companyId);
         Product savedProduct = productRepository.save(product);
-        
+
         log.info("Товар успішно створено з ID: {}", savedProduct.getId());
         return toResponse(savedProduct);
     }
@@ -75,17 +83,16 @@ public class ProductService {
         product.setUnitPrice(request.getUnitPrice());
         product.setUnitOfMeasure(request.getUnitOfMeasure());
 
-        if (request.getOrderingCost() != null) product.setOrderingCost(request.getOrderingCost());
+        if (request.getOrderingCost() != null)    product.setOrderingCost(request.getOrderingCost());
         if (request.getHoldingCostRate() != null) product.setHoldingCostRate(request.getHoldingCostRate());
-        if (request.getServiceLevel() != null) product.setServiceLevel(request.getServiceLevel());
+        if (request.getServiceLevel() != null)    product.setServiceLevel(request.getServiceLevel());
 
-        // Використовуємо DRY-методи
         product.setCategory(getCategoryById(request.getCategoryId()));
         product.setSupplier(getSupplierById(request.getSupplierId()));
 
         Product updatedProduct = productRepository.save(product);
         log.info("Товар з ID: {} успішно оновлено", id);
-        
+
         return toResponse(updatedProduct);
     }
 
@@ -93,25 +100,31 @@ public class ProductService {
     public void delete(Long id) {
         log.info("Запит на м'яке видалення товару з ID: {}", id);
         Product product = getProductEntityById(id);
-        product.setIsActive(false); // м'яке видалення
+        product.setIsActive(false);
         productRepository.save(product);
         log.info("Товар з ID: {} успішно деактивовано", id);
     }
 
-    // ── Допоміжні методи (DRY - Don't Repeat Yourself) ───────────
+    // ── Допоміжні методи ────────────────────────────────────────
 
-    private Product getProductEntityById(Long id) {
+    public Product getProductEntityById(Long id) {
+        Long companyId = securityUtils.getCurrentCompanyId();
         return productRepository.findById(id)
+            .filter(p -> p.getCompanyId().equals(companyId))
             .orElseThrow(() -> new ResourceNotFoundException("Товар з ID " + id + " не знайдено"));
     }
 
     private Category getCategoryById(Long id) {
+        Long companyId = securityUtils.getCurrentCompanyId();
         return categoryRepository.findById(id)
+            .filter(c -> c.getCompanyId().equals(companyId))
             .orElseThrow(() -> new ResourceNotFoundException("Категорію з ID " + id + " не знайдено"));
     }
 
     private Supplier getSupplierById(Long id) {
+        Long companyId = securityUtils.getCurrentCompanyId();
         return supplierRepository.findById(id)
+            .filter(s -> s.getCompanyId().equals(companyId))
             .orElseThrow(() -> new ResourceNotFoundException("Постачальника з ID " + id + " не знайдено"));
     }
 
@@ -135,7 +148,7 @@ public class ProductService {
             .build();
     }
 
-    private Product fromRequest(ProductRequest r) {
+    private Product fromRequest(ProductRequest r, Long companyId) {
         return Product.builder()
             .sku(r.getSku())
             .name(r.getName())
@@ -145,6 +158,7 @@ public class ProductService {
             .holdingCostRate(r.getHoldingCostRate())
             .serviceLevel(r.getServiceLevel())
             .isActive(true)
+            .companyId(companyId)
             .category(getCategoryById(r.getCategoryId()))
             .supplier(getSupplierById(r.getSupplierId()))
             .build();

@@ -40,4 +40,7 @@ public class Sale {
     private User createdBy;
 
     private OffsetDateTime createdAt;
+
+    @Column(name = "company_id", nullable = false)
+    private Long companyId;
 }

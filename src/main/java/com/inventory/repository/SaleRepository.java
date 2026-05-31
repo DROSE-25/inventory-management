@@ -12,9 +12,8 @@ import java.util.List;
 
 public interface SaleRepository extends JpaRepository<Sale, Long> {
 
-    // --- Методы из первого фрагмента ---
-
-    List<Sale> findBySaleDateBetweenOrderBySaleDateDesc(LocalDate from, LocalDate to);
+    List<Sale> findBySaleDateBetweenAndCompanyIdOrderBySaleDateDesc(
+        LocalDate from, LocalDate to, Long companyId);
 
     List<Sale> findByProductIdAndSaleDateBetweenOrderBySaleDateAsc(
         Long productId, LocalDate from, LocalDate to);
@@ -28,10 +27,7 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
         """)
     List<Object[]> findMonthlyDemand(@Param("productId") Long productId);
 
-
-    // --- Методы из второго фрагмента ---
-
-    Page<Sale> findByProductId(Long productId, Pageable pageable);
+    Page<Sale> findByProductIdAndCompanyId(Long productId, Long companyId, Pageable pageable);
 
     @Query(value = """
         SELECT date_trunc(:granularity, sale_date) AS period,
@@ -41,13 +37,15 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
         WHERE product_id = :productId
           AND (:warehouseId IS NULL OR warehouse_id = :warehouseId)
           AND sale_date BETWEEN :fromDate AND :toDate
+          AND company_id = :companyId
         GROUP BY 1
         ORDER BY 1
         """, nativeQuery = true)
     List<Object[]> aggregateByPeriod(
-        @Param("granularity") String granularity,  // 'day' | 'week' | 'month'
+        @Param("granularity") String granularity,
         @Param("productId")   Long productId,
-        @Param("warehouseId") Long warehouseId,    // может быть null
+        @Param("warehouseId") Long warehouseId,
         @Param("fromDate")    LocalDate fromDate,
-        @Param("toDate")      LocalDate toDate);
+        @Param("toDate")      LocalDate toDate,
+        @Param("companyId")   Long companyId);
 }

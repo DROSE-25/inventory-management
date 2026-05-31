@@ -3,6 +3,7 @@ package com.inventory.controller;
 import com.inventory.repository.ProductRepository;
 import com.inventory.optimization.OptimizationService;
 import com.inventory.optimization.dto.OptimizationRecommendation;
+import com.inventory.security.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +21,7 @@ public class OptimizationController {
 
     private final OptimizationService optimizationService;
     private final ProductRepository   productRepository;
+    private final SecurityUtils       securityUtils;
 
     @Operation(summary = "Рекомендація по запасах для конкретного товару")
     @PostMapping("/recommendations/{productId}")
@@ -34,7 +36,10 @@ public class OptimizationController {
     @GetMapping("/reorder-alerts")
     @PreAuthorize("hasAnyRole('MANAGER', 'ADMIN')")
     public ResponseEntity<List<OptimizationRecommendation>> getReorderAlerts() {
-        List<OptimizationRecommendation> alerts = productRepository.findAll().stream()
+        Long companyId = securityUtils.getCurrentCompanyId();
+        List<OptimizationRecommendation> alerts = productRepository
+            .findByCompanyId(companyId)
+            .stream()
             .map(p -> optimizationService.getRecommendation(p.getId()))
             .filter(OptimizationRecommendation::isNeedsReorder)
             .collect(Collectors.toList());

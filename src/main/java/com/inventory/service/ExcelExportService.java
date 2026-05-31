@@ -2,6 +2,7 @@ package com.inventory.service;
 
 import com.inventory.model.AbcXyzResult;
 import com.inventory.repository.AbcXyzResultRepository;
+import com.inventory.security.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -17,10 +18,12 @@ import java.util.List;
 public class ExcelExportService {
 
     private final AbcXyzResultRepository abcXyzResultRepository;
+    private final SecurityUtils          securityUtils;
 
     @Transactional(readOnly = true)
     public byte[] exportAbcXyz() throws IOException {
-        List<AbcXyzResult> data = abcXyzResultRepository.findAllByOrderByRevenueDesc();
+        Long companyId = securityUtils.getCurrentCompanyId();
+        List<AbcXyzResult> data = abcXyzResultRepository.findAllByCompanyIdOrderByRevenueDesc(companyId);
 
         try (Workbook wb = new XSSFWorkbook()) {
             Sheet sheet = wb.createSheet("ABC-XYZ Аналіз");
@@ -56,21 +59,21 @@ public class ExcelExportService {
             }
 
             // Column widths
-            sheet.setColumnWidth(0, 2000);  // ID
-            sheet.setColumnWidth(1, 6000);  // Назва
-            sheet.setColumnWidth(2, 3500);  // SKU
-            sheet.setColumnWidth(3, 2000);  // ABC
-            sheet.setColumnWidth(4, 2000);  // XYZ
-            sheet.setColumnWidth(5, 2500);  // Клас
-            sheet.setColumnWidth(6, 4000);  // Оборот
-            sheet.setColumnWidth(7, 3500);  // Частка %
-            sheet.setColumnWidth(8, 3000);  // CV %
-            sheet.setColumnWidth(9, 20000); // Рекомендація — широка!
+            sheet.setColumnWidth(0, 2000);
+            sheet.setColumnWidth(1, 6000);
+            sheet.setColumnWidth(2, 3500);
+            sheet.setColumnWidth(3, 2000);
+            sheet.setColumnWidth(4, 2000);
+            sheet.setColumnWidth(5, 2500);
+            sheet.setColumnWidth(6, 4000);
+            sheet.setColumnWidth(7, 3500);
+            sheet.setColumnWidth(8, 3000);
+            sheet.setColumnWidth(9, 20000);
 
             int rowNum = 1;
             for (AbcXyzResult r : data) {
                 Row row = sheet.createRow(rowNum);
-                row.setHeight((short) 800); // висота рядка щоб текст не злипався
+                row.setHeight((short) 800);
 
                 boolean isAlt = rowNum % 2 == 0;
                 CellStyle recStyle = isAlt ? wrapAltStyle : wrapStyle;
@@ -88,7 +91,6 @@ public class ExcelExportService {
                 row.createCell(8).setCellValue(r.getCv() != null
                     ? r.getCv().doubleValue() : 0);
 
-                // Recommendation
                 String combined = r.getCombinedClass() != null ? r.getCombinedClass() : "";
                 String rec;
                 if (combined.startsWith("A"))

@@ -2,6 +2,7 @@ package com.inventory.service;
 
 import com.inventory.dto.SalesAggregationPoint;
 import com.inventory.repository.SaleRepository;
+import com.inventory.security.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -14,6 +15,7 @@ import java.util.List;
 public class SalesAggregationService {
 
     private final SaleRepository saleRepo;
+    private final SecurityUtils  securityUtils;
 
     public List<SalesAggregationPoint> aggregate(
             Long productId,
@@ -27,7 +29,9 @@ public class SalesAggregationService {
                 "granularity має бути одне з: day, week, month");
         }
 
-        return saleRepo.aggregateByPeriod(granularity, productId, warehouseId, from, to)
+        Long companyId = securityUtils.getCurrentCompanyId();
+
+        return saleRepo.aggregateByPeriod(granularity, productId, warehouseId, from, to, companyId)
             .stream()
             .map(row -> {
                 LocalDate date;

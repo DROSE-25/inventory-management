@@ -14,7 +14,7 @@ public class Warehouse {
     private Long id;
 
     @NotBlank @Size(max = 100)
-    @Column(nullable = false, unique = true, length = 100)
+    @Column(nullable = false, length = 100)
     private String name;
 
     @Size(max = 255)
@@ -26,4 +26,7 @@ public class Warehouse {
 
     @Column(nullable = false)
     private Boolean isActive = true;
+
+    @Column(name = "company_id", nullable = false)
+    private Long companyId;
 }

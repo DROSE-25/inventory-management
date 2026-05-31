@@ -14,7 +14,7 @@ public class Supplier {
     private Long id;
 
     @NotBlank @Size(max = 150)
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false)
     private String name;
 
     @Size(max = 100)
@@ -35,4 +35,7 @@ public class Supplier {
 
     @Column(nullable = false)
     private Boolean isActive = true;
+
+    @Column(name = "company_id", nullable = false)
+    private Long companyId;
 }

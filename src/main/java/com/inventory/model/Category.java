@@ -15,8 +15,11 @@ public class Category {
     private Long id;
 
     @NotBlank @Size(max = 100)
-    @Column(nullable = false, unique = true, length = 100)
+    @Column(nullable = false, length = 100)
     private String name;
+
+    @Column(name = "company_id", nullable = false)
+    private Long companyId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "parent_id")
