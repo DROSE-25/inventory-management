@@ -3,7 +3,7 @@
 Full-stack web application that **forecasts demand and recommends optimal stock levels**
 using EOQ, Safety Stock, Reorder Point and ABC/XYZ classification.
 
-> 🎓 Bachelor's thesis project — graded **100/100**.
+> 🎓 Bachelor's thesis project — graded **90/100**.
 
 ![Dashboard](docs/screenshots/dashboard1.png)
 
